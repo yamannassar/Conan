@@ -1,103 +1,203 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect, useMemo, useCallback, createContext, useContext } from 'react';
+import ProgressRing from '../components/ProgressRing';
+import StatsCard from '../components/StatsCard';
+import { ContentCard } from '../components/ContentCard';
+import { SearchBar } from '../components/SearchBar';
+import { FilterBar } from '../components/FilterBar';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { TVIcon, BookIcon, MovieIcon } from '../components/Icons';
+import { BackupService } from '../lib/backup';
+import AnalyticsDashboard from "../components/AnalyticsDashboard"
+
+type Episode = {
+    id: number;
+    number: number;
+    title: string;
+    titleJapanese?: string;
+    airDate: string;
+    isFiller: boolean;
+    isImportant: boolean;
+    mangaSource?: string;
+    duration: number;
+};
+
+type Chapter = {
+    id: number;
+    number: number;
+    volume: number;
+    title: string;
+    titleJapanese?: string;
+    releaseDate: string;
+    pageCount: number;
+    isImportant: boolean;
+};
+
+type Movie = {
+    id: number;
+    number: number;
+    title: string;
+    titleJapanese?: string;
+    releaseDate: string;
+    duration: number;
+    chronologicalPlacement: number;
+};
+
+const ThemeContext = createContext<any>(null);
+
+const ThemeProvider = ({ children }: any) => {
+    const [isDark, setIsDark] = useState(false);
+    useEffect(() => {
+        if (isDark) document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+    }, [isDark]);
+    return (
+        <ThemeContext.Provider value={{ isDark, setIsDark }}>
+            {children}
+        </ThemeContext.Provider>
+    );
+};
+
+const useTheme = () => useContext(ThemeContext);
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    const [activeTab, setActiveTab] = useState<'anime' | 'manga' | 'movies'>('anime');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filters, setFilters] = useState({ status: 'all', type: 'all', sort: 'number_asc' });
+    const [episodes, setEpisodes] = useState<Episode[]>([]);
+    const [chapters, setChapters] = useState<Chapter[]>([]);
+    const [movies, setMovies] = useState<Movie[]>([]);
+    const [progress, setProgress] = useState<any>({});
+    const [showAnalytics, setShowAnalytics] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+    // Load progress from localStorage
+    useEffect(() => {
+        const stored = localStorage.getItem('conanTrackerProgress');
+        if (stored) setProgress(JSON.parse(stored));
+    }, []);
+
+    // Fetch Data from API
+    useEffect(() => {
+        fetch('/api/episodes').then(r => r.json()).then(setEpisodes);
+        fetch('/api/chapters').then(r => r.json()).then(setChapters);
+        fetch('/api/movies').then(r => r.json()).then(setMovies);
+    }, []);
+
+    const handleStatusChange = useCallback((type: string, id: number, status: string) => {
+        const key = `${type}_${id}`;
+        const newProgress = { ...progress };
+        if (!newProgress[key]) {
+            newProgress[key] = {
+                type,
+                id,
+                status,
+                watchCount: 1,
+                firstWatched: new Date().toISOString(),
+                lastWatched: new Date().toISOString()
+            };
+        } else {
+            newProgress[key].status = status;
+            newProgress[key].lastWatched = new Date().toISOString();
+        }
+        localStorage.setItem('conanTrackerProgress', JSON.stringify(newProgress));
+        setProgress(newProgress);
+    }, [progress]);
+
+    const getFilteredContent = useMemo(() => {
+        let content: any[] = [];
+        let contentType = '';
+        switch (activeTab) {
+            case 'anime': content = episodes; contentType = 'episode'; break;
+            case 'manga': content = chapters; contentType = 'chapter'; break;
+            case 'movies': content = movies; contentType = 'movie'; break;
+        }
+        // search
+        if (searchQuery) {
+            content = content.filter(item =>
+                item.title.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+        }
+        return { content, type: contentType };
+    }, [activeTab, searchQuery, episodes, chapters, movies]);
+
+    // Backup & Import Handlers
+    const handleExport = () => {
+        BackupService.exportData(progress);
+    };
+
+    const handleImport = async (file: File) => {
+        const imported = await BackupService.importData(file);
+        if (imported) {
+            setProgress(imported);
+            localStorage.setItem('conanTrackerProgress', JSON.stringify(imported));
+        }
+    };
+
+    return (
+        <ThemeProvider>
+            <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
+                <header className="sticky top-0 z-50 bg-white dark:bg-gray-800 p-4 shadow flex justify-between items-center">
+                    <h1 className="text-xl font-bold text-gray-900 dark:text-white">Conan Tracker</h1>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowAnalytics(!showAnalytics)}
+                            className="px-3 py-1 text-sm bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
+                        >
+                            {showAnalytics ? "Close Analytics" : "Analytics"}
+                        </button>
+                        <button
+                            onClick={handleExport}
+                            className="px-3 py-1 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600"
+                        >
+                            Export
+                        </button>
+                        <label className="px-3 py-1 text-sm bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 cursor-pointer">
+                            Import
+                            <input type="file" accept=".json" hidden onChange={(e) => e.target.files && handleImport(e.target.files[0])} />
+                        </label>
+                        <ThemeToggle />
+                    </div>
+                </header>
+
+                <main className="max-w-5xl mx-auto p-4">
+                    <div className="flex gap-2 mb-4">
+                        {['anime', 'manga', 'movies'].map(tab => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab as any)}
+                                className={`px-4 py-2 rounded ${activeTab === tab
+                                    ? 'bg-blue-500 text-white'
+                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                                }`}
+                            >
+                                {tab.toUpperCase()}
+                            </button>
+                        ))}
+                    </div>
+
+                    <SearchBar query={searchQuery} onChange={setSearchQuery} placeholder={`Search ${activeTab}`} />
+                    <FilterBar filters={filters} onChange={setFilters} />
+
+                    {showAnalytics ? (
+                        <div className="mt-6">
+                            <AnalyticsDashboard progress={progress} data={{ episodes, chapters, movies }} />
+                        </div>
+                    ) : (
+                        <div className="mt-4 space-y-2">
+                            {getFilteredContent.content.map(item => (
+                                <ContentCard
+                                    key={item.id}
+                                    item={item}
+                                    type={getFilteredContent.type}
+                                    progress={progress}
+                                    onStatusChange={handleStatusChange}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </main>
+            </div>
+        </ThemeProvider>
+    );
 }

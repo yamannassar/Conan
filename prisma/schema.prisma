@@ -1,0 +1,103 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model SeriesType {
+  id    Int     @id @default(autoincrement())
+  name  String
+
+  episodes Episode[]
+}
+
+model Episode {
+  id             Int        @id @default(autoincrement())
+  seriesType     SeriesType @relation(fields: [seriesTypeId], references: [id])
+  seriesTypeId   Int
+  number         Int
+  title          String
+  titleJapanese  String?
+  titleRomanized String?
+  airDate        DateTime?
+  mangaSource    String?
+  isFiller       Boolean    @default(false)
+  isImportant    Boolean    @default(false)
+  description    String?
+  durationMinutes Int?
+
+  @@unique([seriesTypeId, number])
+}
+
+model MangaChapter {
+  id            Int     @id @default(autoincrement())
+  number        Int     @unique
+  volume        Int?
+  title         String
+  titleJapanese String?
+  releaseDate   DateTime?
+  pageCount     Int?
+  isImportant   Boolean @default(false)
+  description   String?
+}
+
+model Movie {
+  id                   Int     @id @default(autoincrement())
+  number               Int     @unique
+  title                String
+  titleJapanese        String?
+  releaseDate          DateTime?
+  durationMinutes      Int?
+  chronologicalPlacement Int?
+  description          String?
+}
+
+model UserProgress {
+  id              Int      @id @default(autoincrement())
+  contentType     String
+  contentId       Int
+  status          String
+  watchCount      Int      @default(0)
+  firstWatchedDate DateTime?
+  lastWatchedDate  DateTime?
+  rating          Int?
+  notes           String?
+  isFavorite      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([contentType, contentId])
+}
+
+model Tag {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  color String?
+
+  contentTags ContentTag[]
+}
+
+model ContentTag {
+  id         Int    @id @default(autoincrement())
+  tag        Tag    @relation(fields: [tagId], references: [id])
+  tagId      Int
+  contentType String
+  contentId   Int
+
+  @@unique([tagId, contentType, contentId])
+}
+
+model StoryArc {
+  id            Int     @id @default(autoincrement())
+  name          String
+  startEpisode  Int?
+  endEpisode    Int?
+  startChapter  Int?
+  endChapter    Int?
+  description   String?
+  importanceLevel Int?
+}
