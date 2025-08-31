@@ -1,35 +1,34 @@
-import { StorageService } from "./storage";
-
+// src/lib/backup.ts
 export class BackupService {
-    exportData() {
-        if (typeof window === "undefined") return;
-
+    static exportData(progress: any) {
         const data = {
-            version: "1.0.0",
+            version: "2.0.0",
             exportDate: new Date().toISOString(),
-            progress: StorageService.getUserProgress(),
-            settings: StorageService.getSettings()
+            progress
         };
 
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
-
         const a = document.createElement("a");
         a.href = url;
-        a.download = `conan-tracker-backup-${Date.now()}.json`;
+        a.download = `conan-tracker-${Date.now()}.json`;
         a.click();
-
         URL.revokeObjectURL(url);
     }
 
-    async importData(file: File) {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        if (data && data.version === "1.0.0" && data.progress) {
-            StorageService.mergeProgress(data.progress);
-            if (data.settings) StorageService.saveSettings(data.settings);
-            return true;
+    static async importData(file: File): Promise<any> {
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            if (data?.version && data?.progress) {
+                return data.progress;
+            }
+            throw new Error("Invalid backup file");
+        } catch (error) {
+            console.error("Import failed:", error);
+            return null;
         }
-        return false;
     }
 }
+
+export const { exportData, importData } = BackupService;

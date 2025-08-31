@@ -1,203 +1,132 @@
+// src/app/page.tsx
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, createContext, useContext } from 'react';
-import ProgressRing from '../components/ProgressRing';
-import StatsCard from '../components/StatsCard';
-import { ContentCard } from '../components/ContentCard';
-import { SearchBar } from '../components/SearchBar';
-import { FilterBar } from '../components/FilterBar';
-import { ThemeToggle } from '../components/ThemeToggle';
-import { TVIcon, BookIcon, MovieIcon } from '../components/Icons';
-import { BackupService } from '../lib/backup';
-import AnalyticsDashboard from "../components/AnalyticsDashboard"
+import { useState, useEffect } from 'react';
+import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { exportData, importData } from '@/lib/backup';
+import { useTheme } from '@/hooks/useTheme';
+import ContentCard from '@/components/ContentCard';
+import StatsCard from '@/components/StatsCard';
+import { SearchBar } from '@/components/SearchBar';
+import { FilterBar } from '@/components/FilterBar';
 
-type Episode = {
-    id: number;
-    number: number;
-    title: string;
-    titleJapanese?: string;
-    airDate: string;
-    isFiller: boolean;
-    isImportant: boolean;
-    mangaSource?: string;
-    duration: number;
-};
+const queryClient = new QueryClient();
 
-type Chapter = {
-    id: number;
-    number: number;
-    volume: number;
-    title: string;
-    titleJapanese?: string;
-    releaseDate: string;
-    pageCount: number;
-    isImportant: boolean;
-};
-
-type Movie = {
-    id: number;
-    number: number;
-    title: string;
-    titleJapanese?: string;
-    releaseDate: string;
-    duration: number;
-    chronologicalPlacement: number;
-};
-
-const ThemeContext = createContext<any>(null);
-
-const ThemeProvider = ({ children }: any) => {
-    const [isDark, setIsDark] = useState(false);
-    useEffect(() => {
-        if (isDark) document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-    }, [isDark]);
-    return (
-        <ThemeContext.Provider value={{ isDark, setIsDark }}>
-            {children}
-        </ThemeContext.Provider>
-    );
-};
-
-const useTheme = () => useContext(ThemeContext);
-
-export default function Home() {
-    const [activeTab, setActiveTab] = useState<'anime' | 'manga' | 'movies'>('anime');
+function MainApp() {
+    const [activeTab, setActiveTab] = useState<'anime' | 'manga' | 'movies' | 'ova'>('anime');
     const [searchQuery, setSearchQuery] = useState('');
     const [filters, setFilters] = useState({ status: 'all', type: 'all', sort: 'number_asc' });
-    const [episodes, setEpisodes] = useState<Episode[]>([]);
-    const [chapters, setChapters] = useState<Chapter[]>([]);
-    const [movies, setMovies] = useState<Movie[]>([]);
-    const [progress, setProgress] = useState<any>({});
-    const [showAnalytics, setShowAnalytics] = useState(false);
+    const { theme, toggleTheme } = useTheme();
 
-    // Load progress from localStorage
-    useEffect(() => {
-        const stored = localStorage.getItem('conanTrackerProgress');
-        if (stored) setProgress(JSON.parse(stored));
-    }, []);
+    const { data: stats } = useQuery({
+        queryKey: ['stats'],
+        queryFn: api.getStats
+    });
 
-    // Fetch Data from API
-    useEffect(() => {
-        fetch('/api/episodes').then(r => r.json()).then(setEpisodes);
-        fetch('/api/chapters').then(r => r.json()).then(setChapters);
-        fetch('/api/movies').then(r => r.json()).then(setMovies);
-    }, []);
+    const { data: content, refetch } = useQuery({
+        queryKey: ['content', activeTab, searchQuery, filters],
+        queryFn: () => api.getContent(activeTab, { search: searchQuery, ...filters })
+    });
 
-    const handleStatusChange = useCallback((type: string, id: number, status: string) => {
-        const key = `${type}_${id}`;
-        const newProgress = { ...progress };
-        if (!newProgress[key]) {
-            newProgress[key] = {
-                type,
-                id,
-                status,
-                watchCount: 1,
-                firstWatched: new Date().toISOString(),
-                lastWatched: new Date().toISOString()
-            };
-        } else {
-            newProgress[key].status = status;
-            newProgress[key].lastWatched = new Date().toISOString();
+    const updateProgress = useMutation({
+        mutationFn: api.updateProgress,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['content'] });
+            queryClient.invalidateQueries({ queryKey: ['stats'] });
         }
-        localStorage.setItem('conanTrackerProgress', JSON.stringify(newProgress));
-        setProgress(newProgress);
-    }, [progress]);
+    });
 
-    const getFilteredContent = useMemo(() => {
-        let content: any[] = [];
-        let contentType = '';
-        switch (activeTab) {
-            case 'anime': content = episodes; contentType = 'episode'; break;
-            case 'manga': content = chapters; contentType = 'chapter'; break;
-            case 'movies': content = movies; contentType = 'movie'; break;
-        }
-        // search
-        if (searchQuery) {
-            content = content.filter(item =>
-                item.title.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-        }
-        return { content, type: contentType };
-    }, [activeTab, searchQuery, episodes, chapters, movies]);
-
-    // Backup & Import Handlers
-    const handleExport = () => {
-        BackupService.exportData(progress);
+    const handleStatusChange = (type: string, id: number, status: string) => {
+        updateProgress.mutate({ contentType: type, contentId: id, status });
     };
 
-    const handleImport = async (file: File) => {
-        const imported = await BackupService.importData(file);
-        if (imported) {
-            setProgress(imported);
-            localStorage.setItem('conanTrackerProgress', JSON.stringify(imported));
+    const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const data = await importData(file);
+            if (data) {
+                // Process imported data
+                refetch();
+            }
         }
     };
 
     return (
-        <ThemeProvider>
-            <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
-                <header className="sticky top-0 z-50 bg-white dark:bg-gray-800 p-4 shadow flex justify-between items-center">
-                    <h1 className="text-xl font-bold text-gray-900 dark:text-white">Conan Tracker</h1>
-                    <div className="flex items-center gap-2">
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+            <header className="sticky top-0 z-50 bg-white dark:bg-gray-800 shadow">
+                <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Conan Tracker</h1>
+                    <div className="flex gap-2">
                         <button
-                            onClick={() => setShowAnalytics(!showAnalytics)}
-                            className="px-3 py-1 text-sm bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
+                            onClick={toggleTheme}
+                            className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700"
                         >
-                            {showAnalytics ? "Close Analytics" : "Analytics"}
+                            {theme === 'dark' ? '☀️' : '🌙'}
                         </button>
                         <button
-                            onClick={handleExport}
-                            className="px-3 py-1 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600"
+                            onClick={() => exportData({})}
+                            className="px-4 py-2 bg-green-500 text-white rounded-lg"
                         >
                             Export
                         </button>
-                        <label className="px-3 py-1 text-sm bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 cursor-pointer">
+                        <label className="px-4 py-2 bg-blue-500 text-white rounded-lg cursor-pointer">
                             Import
-                            <input type="file" accept=".json" hidden onChange={(e) => e.target.files && handleImport(e.target.files[0])} />
+                            <input type="file" hidden onChange={handleImport} accept=".json" />
                         </label>
-                        <ThemeToggle />
                     </div>
-                </header>
+                </div>
+            </header>
 
-                <main className="max-w-5xl mx-auto p-4">
-                    <div className="flex gap-2 mb-4">
-                        {['anime', 'manga', 'movies'].map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab as any)}
-                                className={`px-4 py-2 rounded ${activeTab === tab
+            <main className="max-w-7xl mx-auto px-4 py-8">
+                {stats && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                        <StatsCard title="Episodes" stats={stats.episodes} />
+                        <StatsCard title="Chapters" stats={stats.chapters} />
+                        <StatsCard title="Movies" stats={stats.movies} />
+                        <StatsCard title="OVAs" stats={stats.ovas} />
+                    </div>
+                )}
+
+                <div className="flex gap-2 mb-6">
+                    {(['anime', 'manga', 'movies', 'ova'] as const).map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-4 py-2 rounded-lg font-medium ${
+                                activeTab === tab
                                     ? 'bg-blue-500 text-white'
-                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                                }`}
-                            >
-                                {tab.toUpperCase()}
-                            </button>
-                        ))}
-                    </div>
+                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                            }`}
+                        >
+                            {tab.toUpperCase()}
+                        </button>
+                    ))}
+                </div>
 
-                    <SearchBar query={searchQuery} onChange={setSearchQuery} placeholder={`Search ${activeTab}`} />
-                    <FilterBar filters={filters} onChange={setFilters} />
+                <SearchBar query={searchQuery} onChange={setSearchQuery} placeholder={`Search ${activeTab}...`} />
+                <FilterBar filters={filters} onChange={setFilters} />
 
-                    {showAnalytics ? (
-                        <div className="mt-6">
-                            <AnalyticsDashboard progress={progress} data={{ episodes, chapters, movies }} />
-                        </div>
-                    ) : (
-                        <div className="mt-4 space-y-2">
-                            {getFilteredContent.content.map(item => (
-                                <ContentCard
-                                    key={item.id}
-                                    item={item}
-                                    type={getFilteredContent.type}
-                                    progress={progress}
-                                    onStatusChange={handleStatusChange}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </main>
-            </div>
-        </ThemeProvider>
+                <div className="mt-6 space-y-4">
+                    {content?.data?.map((item: any) => (
+                        <ContentCard
+                            key={item.id}
+                            item={item}
+                            type={activeTab === 'anime' || activeTab === 'ova' ? 'episode' : activeTab === 'manga' ? 'chapter' : 'movie'}
+                            progress={item.progress?.[0] || {}}
+                            onStatusChange={handleStatusChange}
+                        />
+                    ))}
+                </div>
+            </main>
+        </div>
+    );
+}
+
+export default function Home() {
+    return (
+        <QueryClientProvider client={queryClient}>
+            <MainApp />
+        </QueryClientProvider>
     );
 }
